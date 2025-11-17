@@ -1,0 +1,74 @@
+# Core Framework
+streamlit
+python-dotenv
+
+# Data Processing
+pandas
+numpy
+scipy
+
+# API and Web Requests
+requests
+beautifulsoup4
+lxml
+
+# Deep Learning
+torch
+pytorch-lightning
+pytorch-forecasting
+
+# NLP and Transformers
+transformers
+sentence-transformers
+tokenizers
+
+# RAG and Vector Search
+faiss-cpu
+langchain
+openai
+
+# Visualization
+plotly
+matplotlib
+seaborn
+
+# Machine Learning Utilities
+scikit-learn
+xgboost
+
+# Database (Optional)
+sqlalchemy
+psycopg2-binary
+
+# Caching (Optional)
+redis
+
+# Configuration
+pyyaml
+hydra-core
+
+# Testing
+pytest
+pytest-cov
+pytest-mock
+
+# Code Quality
+black
+flake8
+mypy
+isort
+
+# Logging and Monitoring
+loguru
+tensorboard
+wandb
+
+# Utilities
+tqdm
+python-dateutil
+pytz
+
+# Jupyter (for notebooks)
+jupyter
+ipykernel
+ipywidgets==8.1.1
