@@ -1,0 +1,68 @@
+# settings.yaml - Application Settings
+
+app:
+  name: "F1 Digital Twin"
+  version: "1.0.0"
+  debug: false
+  log_level: "INFO"
+
+data:
+  start_year: 2018
+  end_year: 2024
+  min_races_for_prediction: 5
+  data_refresh_hours: 24
+  
+  paths:
+    raw: "data/raw"
+    processed: "data/processed"
+    models: "data/models"
+    news_corpus: "data/news_corpus"
+    cache: "data/cache"
+
+visualization:
+  theme: "plotly_white"
+  chart_height: 500
+  show_confidence_intervals: true
+  default_top_n_drivers: 10
+  color_scheme: "f1_official"
+
+cache:
+  enabled: true
+  ttl_seconds: 3600
+  max_size_mb: 1000
+  redis_url: "redis://localhost:6379/0"
+
+database:
+  enabled: false
+  url: "postgresql://f1user:changeme@localhost:5432/f1_digital_twin"
+  pool_size: 5
+
+api:
+  ergast:
+    base_url: "https://ergast.com/api/f1"
+    rate_limit_delay: 0.5
+    timeout: 30
+    
+  openf1:
+    base_url: "https://api.openf1.org/v1"
+    timeout: 30
+    
+  news:
+    enabled: true
+    refresh_interval_hours: 6
+    max_articles: 100
+
+rag:
+  retriever_model: "sentence-transformers/all-MiniLM-L6-v2"
+  generator_model: "gpt-3.5-turbo"
+  top_k_documents: 5
+  max_context_length: 2048
+  embedding_dimension: 384
+
+features:
+  enable_predictions: true
+  enable_rag_insights: true
+  enable_news_collection: true
+  enable_real_time_data: false
+
+---
