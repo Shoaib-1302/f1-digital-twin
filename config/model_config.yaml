@@ -1,0 +1,155 @@
+# model_config.yaml - Model Configuration
+
+model:
+  type: "temporal_fusion_transformer"
+  
+  tft:
+    # Architecture
+    hidden_size: 160
+    lstm_layers: 2
+    attention_head_size: 4
+    dropout: 0.1
+    hidden_continuous_size: 16
+    
+    # Training
+    learning_rate: 0.001
+    batch_size: 64
+    max_epochs: 100
+    gradient_clip_val: 0.1
+    
+    # Data
+    max_encoder_length: 10
+    max_prediction_length: 3
+    min_encoder_length: 5
+    min_prediction_length: 1
+    
+    # Features
+    static_categoricals:
+      - driver_id
+      - constructor_id
+    
+    static_reals:
+      - driver_experience_years
+      - career_wins
+      - career_podiums
+    
+    time_varying_known_reals:
+      - circuit_encoded
+      - weather_condition
+      - days_since_last_race
+    
+    time_varying_unknown_reals:
+      - position
+      - grid_position
+      - points
+      - fastest_lap_rank
+      - rolling_avg_position_5
+      - rolling_avg_points_5
+      - form_last_3_races
+    
+    target: "points"
+    target_normalizer: "group_normalizer"
+    
+    # Quantiles for prediction intervals
+    output_size: 7
+    quantiles:
+      - 0.025  # 2.5th percentile
+      - 0.1    # 10th percentile
+      - 0.25   # 25th percentile
+      - 0.5    # 50th percentile (median)
+      - 0.75   # 75th percentile
+      - 0.9    # 90th percentile
+      - 0.975  # 97.5th percentile
+    
+    # Loss function
+    loss: "quantile_loss"
+    
+    # Optimizer
+    optimizer:
+      type: "adam"
+      weight_decay: 0.0001
+    
+    # Learning rate scheduler
+    scheduler:
+      type: "reduce_on_plateau"
+      patience: 4
+      factor: 0.5
+      min_lr: 0.0001
+    
+    # Early stopping
+    early_stopping:
+      enabled: true
+      patience: 10
+      monitor: "val_loss"
+      mode: "min"
+
+preprocessing:
+  # Feature engineering
+  rolling_windows:
+    - 3
+    - 5
+    - 10
+  
+  # Outlier handling
+  outlier_method: "iqr"
+  outlier_threshold: 3.0
+  
+  # Missing value imputation
+  imputation_strategy: "median"
+  
+  # Normalization
+  normalize_features: true
+  normalization_method: "standard"
+  
+  # Train/val/test split
+  test_size: 0.2
+  validation_size: 0.1
+  time_based_split: true
+  random_seed: 42
+
+evaluation:
+  metrics:
+    - mae  # Mean Absolute Error
+    - rmse  # Root Mean Squared Error
+    - mape  # Mean Absolute Percentage Error
+    - r2    # R-squared
+    - quantile_loss
+    - accuracy_at_k  # Top-K accuracy
+  
+  k_values:
+    - 1
+    - 3
+    - 5
+
+inference:
+  batch_size: 32
+  num_workers: 4
+  use_gpu: true
+  confidence_intervals:
+    - 80
+    - 95
+
+logging:
+  # TensorBoard
+  tensorboard:
+    enabled: true
+    log_dir: "logs/tensorboard"
+  
+  # Weights & Biases
+  wandb:
+    enabled: false
+    project: "f1-digital-twin"
+    entity: null
+  
+  # Model checkpointing
+  checkpoint:
+    save_top_k: 3
+    monitor: "val_loss"
+    mode: "min"
+    save_last: true
+
+deployment:
+  model_format: "pytorch"
+  optimize_for_inference: true
+  quantization: false
+  batch_inference: true
