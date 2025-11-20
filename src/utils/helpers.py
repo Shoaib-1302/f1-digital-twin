@@ -16,24 +16,65 @@ import json
 def load_config(config_path: str = "config/settings.yaml") -> Dict:
     """Load application configuration from YAML file"""
     try:
-        with open(config_path, 'r') as f:
-            config = yaml.safe_load(f)
+        config_file = Path(config_path)
+        
+        # Check if config file exists
+        if not config_file.exists():
+            st.warning(f"Config file not found: {config_path}. Using defaults.")
+            return get_default_config()
+        
+        # Load YAML
+        with open(config_file, 'r') as f:
+            # Read entire file content
+            content = f.read()
+            
+            # Check if it's a multi-document YAML (contains ---)
+            if '\n---\n' in content or content.startswith('---\n'):
+                # Split into documents and load first one
+                docs = content.split('\n---\n')
+                config = yaml.safe_load(docs[0])
+            else:
+                # Single document, load normally
+                config = yaml.safe_load(content)
+        
+        # Validate config
+        if not isinstance(config, dict):
+            st.warning("Invalid config format. Using defaults.")
+            return get_default_config()
+        
         return config
-    except FileNotFoundError:
-        st.warning(f"Config file not found: {config_path}. Using defaults.")
+    
+    except yaml.YAMLError as e:
+        st.error(f"Error parsing YAML config: {e}")
+        return get_default_config()
+    
+    except Exception as e:
+        st.warning(f"Error loading config: {e}. Using defaults.")
         return get_default_config()
 
 
 def get_default_config() -> Dict:
     """Return default configuration"""
     return {
+        'app': {
+            'name': 'F1 Digital Twin',
+            'version': '1.0.0',
+            'debug': False
+        },
         'data': {
             'start_year': 2018,
             'end_year': 2024,
-            'min_races_for_prediction': 5
+            'min_races_for_prediction': 5,
+            'paths': {
+                'raw': 'data/raw',
+                'processed': 'data/processed',
+                'models': 'data/models',
+                'news_corpus': 'data/news_corpus',
+                'cache': 'data/cache'
+            }
         },
         'visualization': {
-            'theme': 'plotly_dark',
+            'theme': 'plotly_white',
             'chart_height': 500,
             'show_confidence_intervals': True
         },
@@ -45,8 +86,15 @@ def get_default_config() -> Dict:
             'batch_size': 64
         },
         'cache': {
+            'enabled': False,
             'ttl_seconds': 3600,
             'max_size_mb': 1000
+        },
+        'features': {
+            'enable_predictions': True,
+            'enable_rag_insights': True,
+            'enable_news_collection': True,
+            'enable_real_time_data': False
         }
     }
 
@@ -90,22 +138,33 @@ def format_prediction_text(prediction: Dict, driver_name: str) -> str:
 
 def calculate_driver_statistics(driver_data: pd.DataFrame) -> Dict[str, Any]:
     """Calculate comprehensive driver statistics"""
+    if len(driver_data) == 0:
+        return {}
+    
     stats = {
         'total_races': len(driver_data),
-        'total_points': driver_data['points'].sum(),
-        'avg_position': driver_data['position'].mean(),
-        'median_position': driver_data['position'].median(),
-        'wins': len(driver_data[driver_data['position'] == 1]),
-        'podiums': len(driver_data[driver_data['position'] <= 3]),
-        'top_5': len(driver_data[driver_data['position'] <= 5]),
-        'dnfs': len(driver_data[driver_data['status'].str.contains('Retired|Accident|Collision', case=False, na=False)]),
-        'points_per_race': driver_data['points'].mean(),
-        'best_finish': driver_data['position'].min(),
-        'worst_finish': driver_data['position'].max()
+        'total_points': driver_data['points'].sum() if 'points' in driver_data.columns else 0,
+        'avg_position': driver_data['position'].mean() if 'position' in driver_data.columns else 0,
+        'median_position': driver_data['position'].median() if 'position' in driver_data.columns else 0,
+        'wins': len(driver_data[driver_data['position'] == 1]) if 'position' in driver_data.columns else 0,
+        'podiums': len(driver_data[driver_data['position'] <= 3]) if 'position' in driver_data.columns else 0,
+        'top_5': len(driver_data[driver_data['position'] <= 5]) if 'position' in driver_data.columns else 0,
+        'points_per_race': driver_data['points'].mean() if 'points' in driver_data.columns else 0,
+        'best_finish': driver_data['position'].min() if 'position' in driver_data.columns else 0,
+        'worst_finish': driver_data['position'].max() if 'position' in driver_data.columns else 0
     }
     
+    # DNFs
+    if 'status' in driver_data.columns:
+        stats['dnfs'] = len(driver_data[driver_data['status'].str.contains('Retired|Accident|Collision', case=False, na=False)])
+    else:
+        stats['dnfs'] = 0
+    
     # Calculate consistency (std dev of positions)
-    stats['consistency'] = driver_data['position'].std()
+    if 'position' in driver_data.columns and len(driver_data) > 1:
+        stats['consistency'] = driver_data['position'].std()
+    else:
+        stats['consistency'] = 0
     
     # Win rate
     stats['win_rate'] = stats['wins'] / stats['total_races'] if stats['total_races'] > 0 else 0
@@ -118,15 +177,21 @@ def calculate_driver_statistics(driver_data: pd.DataFrame) -> Dict[str, Any]:
 
 def get_recent_form(driver_data: pd.DataFrame, n_races: int = 5) -> Dict[str, float]:
     """Calculate recent form metrics"""
+    if len(driver_data) == 0:
+        return {}
+    
     recent = driver_data.tail(n_races)
     
     form = {
-        'avg_position': recent['position'].mean(),
-        'avg_points': recent['points'].mean(),
-        'total_points': recent['points'].sum(),
-        'best_position': recent['position'].min(),
-        'trend': 'improving' if recent['position'].iloc[-1] < recent['position'].iloc[0] else 'declining'
+        'avg_position': recent['position'].mean() if 'position' in recent.columns else 0,
+        'avg_points': recent['points'].mean() if 'points' in recent.columns else 0,
+        'total_points': recent['points'].sum() if 'points' in recent.columns else 0,
+        'best_position': recent['position'].min() if 'position' in recent.columns else 0,
+        'trend': 'unknown'
     }
+    
+    if 'position' in recent.columns and len(recent) >= 2:
+        form['trend'] = 'improving' if recent['position'].iloc[-1] < recent['position'].iloc[0] else 'declining'
     
     return form
 
@@ -167,32 +232,33 @@ def get_season_summary(data: pd.DataFrame, season: int) -> Dict:
     season_data = data[data['season'] == season]
     
     summary = {
-        'total_races': season_data['round'].nunique(),
-        'drivers': season_data['driver_id'].nunique(),
-        'constructors': season_data['constructor_id'].nunique(),
+        'total_races': season_data['round'].nunique() if 'round' in season_data.columns else 0,
+        'drivers': season_data['driver_id'].nunique() if 'driver_id' in season_data.columns else 0,
+        'constructors': season_data['constructor_id'].nunique() if 'constructor_id' in season_data.columns else 0,
         'champion': None,
         'constructor_champion': None
     }
     
     # Find champions (most points)
-    if len(season_data) > 0:
+    if len(season_data) > 0 and 'driver_id' in season_data.columns and 'points' in season_data.columns:
         driver_points = season_data.groupby('driver_id')['points'].sum().sort_values(ascending=False)
         if len(driver_points) > 0:
             summary['champion'] = driver_points.index[0]
         
-        constructor_points = season_data.groupby('constructor_id')['points'].sum().sort_values(ascending=False)
-        if len(constructor_points) > 0:
-            summary['constructor_champion'] = constructor_points.index[0]
+        if 'constructor_id' in season_data.columns:
+            constructor_points = season_data.groupby('constructor_id')['points'].sum().sort_values(ascending=False)
+            if len(constructor_points) > 0:
+                summary['constructor_champion'] = constructor_points.index[0]
     
     return summary
 
 
 def cache_data(key: str, data: Any, cache_dir: Path = Path("data/cache")):
     """Cache data to disk"""
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    cache_file = cache_dir / f"{key}.json"
-    
     try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cache_file = cache_dir / f"{key}.json"
+        
         with open(cache_file, 'w') as f:
             json.dump({
                 'data': data,
@@ -204,12 +270,12 @@ def cache_data(key: str, data: Any, cache_dir: Path = Path("data/cache")):
 
 def load_cached_data(key: str, max_age_hours: int = 24, cache_dir: Path = Path("data/cache")) -> Optional[Any]:
     """Load cached data if it exists and is fresh"""
-    cache_file = cache_dir / f"{key}.json"
-    
-    if not cache_file.exists():
-        return None
-    
     try:
+        cache_file = cache_dir / f"{key}.json"
+        
+        if not cache_file.exists():
+            return None
+        
         with open(cache_file, 'r') as f:
             cached = json.load(f)
         
@@ -326,7 +392,6 @@ DRIVER_ABBREVIATIONS = {
     'charles_leclerc': 'LEC',
     'lando_norris': 'NOR',
     'oscar_piastri': 'PIA'
-    # Add more as needed
 }
 
 
@@ -335,9 +400,12 @@ if __name__ == "__main__":
     config = load_config()
     print("Config loaded:", config)
     
-    stats = calculate_driver_statistics(pd.DataFrame({
+    # Test with sample data
+    sample_df = pd.DataFrame({
         'position': [1, 2, 3, 1, 5],
         'points': [25, 18, 15, 25, 10],
         'status': ['Finished', 'Finished', 'Finished', 'Finished', 'Retired']
-    }))
+    })
+    
+    stats = calculate_driver_statistics(sample_df)
     print("Stats:", stats)
