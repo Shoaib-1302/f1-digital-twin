@@ -28,11 +28,16 @@ st.markdown(create_header(
 
 
 def load_news():
-    """Load news data"""
     try:
-        news_path = Path('data/raw/f1_news.csv')
-        if news_path.exists():
-            return pd.read_csv(news_path)
+        possible_paths = [
+            'data/raw/f1_news.csv',
+            f'{BASE_PATH}/data/raw/f1_news.csv'
+        ]
+        
+        for path in possible_paths:
+            if Path(path).exists():
+                return pd.read_csv(path)
+        
         return None
     except Exception as e:
         st.error(f"Error loading news: {e}")
