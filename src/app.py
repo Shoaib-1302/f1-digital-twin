@@ -31,13 +31,16 @@ st.markdown("""
         color: white;
         margin-bottom: 2rem;
     }
+
     .metric-card {
         background: white;
         padding: 1.5rem;
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         border-left: 4px solid #E10600;
+        color: black !important;   /* <-- Added */
     }
+
     .stButton>button {
         background-color: #E10600;
         color: black;
@@ -46,11 +49,18 @@ st.markdown("""
         border: none;
         font-weight: 600;
     }
+
     .stButton>button:hover {
         background-color: #FF1E00;
     }
+
+    /* NEW GLOBAL TEXT COLOR FIX */
+    body, p, div, span, h1, h2, h3, h4, h5, h6, label {
+        color: black !important;
+    }
 </style>
 """, unsafe_allow_html=True)
+
 
 def main():
     """Main application entry point"""
