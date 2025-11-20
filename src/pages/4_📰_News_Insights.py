@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.visualizations import create_header
 from models.rag_pipeline import F1RAGPipeline
 from data.news_scraper import F1NewsCollector
+from _imports import *
 
 st.set_page_config(
     page_title="News & Insights",
