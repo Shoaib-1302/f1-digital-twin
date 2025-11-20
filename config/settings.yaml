@@ -1,4 +1,4 @@
-# settings.yaml - Application Settings
+# config/settings.yaml - Application Settings
 
 app:
   name: "F1 Digital Twin"
@@ -64,5 +64,3 @@ features:
   enable_rag_insights: true
   enable_news_collection: true
   enable_real_time_data: false
-
----
