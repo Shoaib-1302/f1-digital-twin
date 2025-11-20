@@ -1,4 +1,4 @@
-# model_config.yaml - Model Configuration
+# config/model_config.yaml - Model Configuration
 
 model:
   type: "temporal_fusion_transformer"
@@ -53,13 +53,13 @@ model:
     # Quantiles for prediction intervals
     output_size: 7
     quantiles:
-      - 0.025  # 2.5th percentile
-      - 0.1    # 10th percentile
-      - 0.25   # 25th percentile
-      - 0.5    # 50th percentile (median)
-      - 0.75   # 75th percentile
-      - 0.9    # 90th percentile
-      - 0.975  # 97.5th percentile
+      - 0.025
+      - 0.1
+      - 0.25
+      - 0.5
+      - 0.75
+      - 0.9
+      - 0.975
     
     # Loss function
     loss: "quantile_loss"
@@ -109,12 +109,12 @@ preprocessing:
 
 evaluation:
   metrics:
-    - mae  # Mean Absolute Error
-    - rmse  # Root Mean Squared Error
-    - mape  # Mean Absolute Percentage Error
-    - r2    # R-squared
+    - mae
+    - rmse
+    - mape
+    - r2
     - quantile_loss
-    - accuracy_at_k  # Top-K accuracy
+    - accuracy_at_k
   
   k_values:
     - 1
@@ -130,18 +130,15 @@ inference:
     - 95
 
 logging:
-  # TensorBoard
   tensorboard:
     enabled: true
     log_dir: "logs/tensorboard"
   
-  # Weights & Biases
   wandb:
     enabled: false
     project: "f1-digital-twin"
     entity: null
   
-  # Model checkpointing
   checkpoint:
     save_top_k: 3
     monitor: "val_loss"
