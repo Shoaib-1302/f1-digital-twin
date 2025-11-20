@@ -1,17 +1,48 @@
-"""
-F1 Digital Twin - Main Streamlit Application
-Entry point for the Formula 1 behavioral digital twin system
-"""
-
 import streamlit as st
+import pandas as pd
 import sys
 from pathlib import Path
+import os
 
-# Add src to path
-sys.path.append(str(Path(__file__).parent))
+# Setup Python path for imports
+current_dir = Path(__file__).parent
+project_root = current_dir.parent
 
-from utils.helpers import load_config, initialize_session_state
-from utils.visualizations import create_header
+# Add both src and project root to path
+sys.path.insert(0, str(current_dir))
+sys.path.insert(0, str(project_root))
+
+# Try to import utilities
+try:
+    from utils.helpers import load_config, initialize_session_state
+    from utils.visualizations import create_header
+    UTILS_AVAILABLE = True
+except ImportError:
+    UTILS_AVAILABLE = False
+    
+    # Fallback functions
+    def load_config():
+        return {
+            'app': {'name': 'F1 Digital Twin', 'version': '1.0.0'},
+            'features': {
+                'enable_predictions': False,
+                'enable_rag_insights': False,
+                'enable_news_collection': False
+            }
+        }
+    
+    def initialize_session_state():
+        if 'initialized' not in st.session_state:
+            st.session_state.initialized = True
+    
+    def create_header(title, subtitle="", icon="🏎️"):
+        return f"""
+        <div style='background: linear-gradient(90deg, #E10600 0%, #FF1E00 100%); 
+                    padding: 2rem; border-radius: 10px; color: white; margin-bottom: 2rem;'>
+            <h1 style='margin: 0;'>{icon} {title}</h1>
+            {f"<p style='font-size: 1.2rem; margin-top: 0.5rem;'>{subtitle}</p>" if subtitle else ""}
+        </div>
+        """
 
 # Page configuration
 st.set_page_config(
@@ -32,7 +63,7 @@ st.markdown("""
         margin-bottom: 2rem;
     }
     .metric-card {
-        background: red;
+        background: white;
         padding: 1.5rem;
         border-radius: 10px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
@@ -40,7 +71,7 @@ st.markdown("""
     }
     .stButton>button {
         background-color: #E10600;
-        color: black;
+        color: white;
         border-radius: 5px;
         padding: 0.5rem 2rem;
         border: none;
@@ -100,6 +131,38 @@ def main():
     
     st.markdown("---")
     
+    # Check for data
+    data_available = False
+    data_paths = [
+        'data/processed/processed_data.csv',
+        'data/raw/results.csv'
+    ]
+    
+    for path in data_paths:
+        if Path(path).exists():
+            data_available = True
+            break
+    
+    if not data_available:
+        st.warning("⚠️ No data found!")
+        st.info("""
+        ### Getting Started
+        
+        To use this application, you need to collect F1 data:
+        
+        **Option 1: Run data collection locally**
+        ```bash
+        python -m src.data.data_collector --start-year 2020 --end-year 2024
+        python -m src.data.data_preprocessor
+        ```
+        
+        **Option 2: Upload your data**
+        Use the file uploader in each page to upload CSV files.
+        
+        **Option 3: Use sample data**
+        Download sample data from the repository.
+        """)
+    
     # Overview section
     st.header("📊 System Overview")
     
@@ -137,25 +200,14 @@ def main():
         #### Time-Series Performance Data:
         
         - **Ergast Developer API**: Historical F1 data from 1950-present
-          - Race results, qualifying times, lap data, pit stops
-          - Driver standings, constructor standings
-          - Circuit information and race schedules
-        
         - **OpenF1 API**: Real-time and recent race data
-          - Live timing and telemetry
-          - Lap times and sector times
-          - Tyre strategies and overtakes
-        
         - **Kaggle F1 Dataset**: Comprehensive historical records
-          - 1950-2024 championship data
-          - Driver ratings and performance metrics
         
         #### Contextual Textual Data:
         
         - **NewsAPI.org**: Recent F1 news articles
         - **Formula1.com**: Official race reports and analysis
         - **Expert Blogs**: Technical analysis and commentary
-        - **Injury Reports**: Driver fitness and medical updates
         """)
     
     with tab3:
@@ -166,13 +218,11 @@ def main():
         
         1. **Temporal Fusion Transformer (TFT)**
            - Multi-horizon time-series forecasting
-           - Handles static, time-varying, and known future inputs
            - Built-in attention mechanisms for interpretability
         
         2. **Retrieval-Augmented Generation (RAG)**
            - Dense passage retrieval with embeddings
            - GPT-based natural language generation
-           - Context-aware explanations
         
         #### Framework & Libraries:
         
@@ -180,14 +230,6 @@ def main():
         - **PyTorch**: Deep learning framework
         - **Transformers (Hugging Face)**: NLP models
         - **Plotly**: Interactive visualizations
-        - **Pandas/NumPy**: Data manipulation
-        - **Scikit-learn**: ML utilities
-        
-        #### Infrastructure:
-        
-        - **Docker**: Containerized deployment
-        - **PostgreSQL**: Data storage (optional)
-        - **Redis**: Caching layer (optional)
         """)
     
     st.markdown("---")
@@ -203,15 +245,10 @@ def main():
         
         1. **Explore Driver Analysis** 👤
            - Navigate to the Driver Analysis page
-           - Select a driver to see their performance trends
-           - View AI-generated predictions
+           - Upload data or use collected data
+           - View performance trends
         
-        2. **Check Race Predictions** 🏁
-           - Go to Race Predictions page
-           - See forecasts for upcoming races
-           - Compare different scenarios
-        
-        3. **Compare Teams** 🏆
+        2. **Check Team Comparison** 🏆
            - Visit Team Comparison page
            - Analyze constructor performance
            - Track development trends
@@ -219,21 +256,14 @@ def main():
     
     with col2:
         st.markdown("""
-        ### Need Help?
+        ### System Status
         
-        📖 **Documentation**: Check the README.md for detailed instructions
-        
-        🐛 **Issues**: Report bugs on GitHub
-        
-        💡 **Feature Requests**: Submit via GitHub Issues
-        
-        📧 **Contact**: For support and questions
-        
-        ---
-        
-        **Version**: 1.0.0  
-        **Last Updated**: 2024
         """)
+        
+        # Show status
+        st.success("✅ Application running") if True else st.error("❌ Error")
+        st.info(f"📊 Data available: {'Yes' if data_available else 'No'}")
+        st.info(f"🔧 Utils available: {'Yes' if UTILS_AVAILABLE else 'No'}")
     
     # Footer
     st.markdown("---")
