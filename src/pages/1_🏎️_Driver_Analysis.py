@@ -10,6 +10,7 @@ import plotly.express as px
 from pathlib import Path
 import sys
 import os
+from _imports import *
 
 # Fix imports for Streamlit Cloud
 if os.path.exists('/mount/src/f1-digital-twin'):
