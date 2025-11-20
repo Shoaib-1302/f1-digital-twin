@@ -1,3 +1,33 @@
+import sys
+import os
+from pathlib import Path
+
+# Fix Python path for imports
+if os.path.exists('/mount/src/f1-digital-twin'):
+    # Streamlit Cloud
+    sys.path.insert(0, '/mount/src/f1-digital-twin/src')
+    sys.path.insert(0, '/mount/src/f1-digital-twin')
+elif os.path.exists('/app/f1-digital-twin'):
+    # Alternative Cloud path
+    sys.path.insert(0, '/app/f1-digital-twin/src')
+    sys.path.insert(0, '/app/f1-digital-twin')
+else:
+    # Local development
+    sys.path.insert(0, str(Path(__file__).parent.parent))
+
+# Now import everything else
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+
+# Import with error handling
+try:
+    from utils.visualizations import create_header
+    from utils.helpers import load_config
+    from models.predictor import F1Predictor
+except ImportError as e:
+    st.error(f"Import error: {e}")
+    # Provide fallback functions
 """
 News Insights Page
 AI-powered news analysis and contextual insights
