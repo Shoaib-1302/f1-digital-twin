@@ -51,17 +51,24 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
 def load_data():
-    """Load race and driver data"""
     try:
-        if 'race_data' not in st.session_state:
-            st.session_state.race_data = pd.read_csv('data/processed/processed_data.csv')
-        return st.session_state.race_data
-    except FileNotFoundError:
-        st.warning("Data not found. Please run data collection first.")
+        possible_paths = [
+            'data/processed/processed_data.csv',
+            'data/raw/results.csv',
+            f'{BASE_PATH}/data/processed/processed_data.csv',
+            f'{BASE_PATH}/data/raw/results.csv'
+        ]
+        
+        for path in possible_paths:
+            if Path(path).exists():
+                return pd.read_csv(path)
+        
+        st.warning("Data not found. Please upload a CSV file or run data collection.")
         return None
-
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        return None
 
 def main():
     st.markdown(create_header(
