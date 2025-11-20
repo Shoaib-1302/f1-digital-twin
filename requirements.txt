@@ -71,4 +71,9 @@ pytz
 # Jupyter (for notebooks)
 jupyter
 ipykernel
-ipywidgets==8.1.1
+ipywidgets
+
+streamlit
+pandas
+plotly
+numpy
