@@ -32,12 +32,24 @@ st.markdown(create_header(
 
 
 def load_data():
-    """Load team data"""
     try:
-        if 'team_data' not in st.session_state:
-            st.session_state.team_data = pd.read_csv('data/processed/processed_data.csv')
-        return st.session_state.team_data
-    except FileNotFoundError:
+        possible_paths = [
+            'data/processed/processed_data.csv',
+            'data/raw/results.csv',
+            f'{BASE_PATH}/data/processed/processed_data.csv',
+            f'{BASE_PATH}/data/raw/results.csv'
+        ]
+        
+        for path in possible_paths:
+            if Path(path).exists():
+                df = pd.read_csv(path)
+                if 'team_data' not in st.session_state:
+                    st.session_state.team_data = df
+                return df
+        
+        return None
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
         return None
 
 
