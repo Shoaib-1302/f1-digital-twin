@@ -9,18 +9,35 @@ import plotly.graph_objects as go
 import plotly.express as px
 from pathlib import Path
 import sys
+import os
 
-# Add parent directory to path
-sys.path.append(str(Path(__file__).parent.parent))
+# Fix imports for Streamlit Cloud
+if os.path.exists('/mount/src/f1-digital-twin'):
+    # Running on Streamlit Cloud
+    sys.path.insert(0, '/mount/src/f1-digital-twin/src')
+else:
+    # Running locally
+    sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.visualizations import (
-    create_performance_timeline,
-    create_prediction_chart,
-    create_confidence_interval_chart
-)
-from utils.helpers import load_driver_data, format_prediction_text
-from models.predictor import F1PerformancePredictor
-from models.rag_pipeline import F1RAGPipeline
+try:
+    from utils.visualizations import (
+        create_performance_timeline,
+        create_prediction_chart,
+        create_confidence_interval_chart
+    )
+    from utils.helpers import load_driver_data, format_prediction_text
+    from models.predictor import F1PerformancePredictor
+    from models.rag_pipeline import F1RAGPipeline
+except ImportError as e:
+    st.error(f"Import error: {e}")
+    st.info("Some features may not be available. Please ensure all modules are installed.")
+    # Create dummy functions to prevent crashes
+    def create_performance_timeline(*args, **kwargs):
+        return go.Figure()
+    def create_prediction_chart(*args, **kwargs):
+        return go.Figure()
+    F1PerformancePredictor = None
+    F1RAGPipeline = None
 
 
 st.set_page_config(
@@ -59,13 +76,26 @@ st.markdown("""
 def load_data():
     """Load driver and performance data"""
     try:
-        # Load from session state or files
-        if 'driver_data' not in st.session_state:
-            st.session_state.driver_data = pd.read_csv('data/processed/driver_performance.csv')
+        # Try multiple possible data locations
+        possible_paths = [
+            'data/processed/driver_performance.csv',
+            'data/processed/processed_data.csv',
+            'data/raw/results.csv',
+            '/mount/src/f1-digital-twin/data/processed/processed_data.csv',
+            '/mount/src/f1-digital-twin/data/raw/results.csv'
+        ]
         
-        return st.session_state.driver_data
-    except FileNotFoundError:
-        st.warning("Data not found. Please run data collection first.")
+        for path in possible_paths:
+            if Path(path).exists():
+                df = pd.read_csv(path)
+                st.session_state.driver_data = df
+                return df
+        
+        st.warning("Data files not found. Please run data collection first.")
+        return None
+        
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
         return None
 
 
@@ -76,7 +106,33 @@ def main():
     data = load_data()
     
     if data is None:
-        st.error("Unable to load driver data. Please check data collection.")
+        st.error("Unable to load driver data.")
+        st.info("""
+        ### Getting Started
+        
+        To use this page, you need to:
+        1. Collect F1 data: `python -m src.data.data_collector`
+        2. Preprocess data: `python -m src.data.data_preprocessor`
+        3. Refresh this page
+        
+        Or upload your own data using the file uploader below.
+        """)
+        
+        # File uploader as fallback
+        uploaded_file = st.file_uploader("Upload driver data (CSV)", type=['csv'])
+        if uploaded_file:
+            data = pd.read_csv(uploaded_file)
+            st.success("Data uploaded successfully!")
+        else:
+            return
+    
+    # Ensure required columns exist
+    required_cols = ['driver_id', 'driver_name', 'points', 'position']
+    missing_cols = [col for col in required_cols if col not in data.columns]
+    
+    if missing_cols:
+        st.error(f"Missing required columns: {', '.join(missing_cols)}")
+        st.info(f"Available columns: {', '.join(data.columns.tolist())}")
         return
     
     # Sidebar - Driver Selection
@@ -84,6 +140,11 @@ def main():
     
     # Get unique drivers
     drivers = sorted(data['driver_name'].unique())
+    
+    if len(drivers) == 0:
+        st.error("No drivers found in data")
+        return
+    
     selected_driver = st.sidebar.selectbox(
         "Driver",
         drivers,
@@ -95,12 +156,18 @@ def main():
     
     # Filter data for selected driver
     driver_data = data[data['driver_id'] == driver_id].copy()
-    driver_data = driver_data.sort_values('race_index')
+    
+    # Sort by date or race index
+    if 'date' in driver_data.columns:
+        driver_data['date'] = pd.to_datetime(driver_data['date'])
+        driver_data = driver_data.sort_values('date')
+    elif 'race_index' in driver_data.columns:
+        driver_data = driver_data.sort_values('race_index')
     
     # Analysis options
     st.sidebar.header("Analysis Options")
-    show_predictions = st.sidebar.checkbox("Show Predictions", value=True)
-    show_insights = st.sidebar.checkbox("Show AI Insights", value=True)
+    show_predictions = st.sidebar.checkbox("Show Predictions", value=False)  # Disabled by default
+    show_insights = st.sidebar.checkbox("Show AI Insights", value=False)
     n_races_predict = st.sidebar.slider("Races to Predict", 1, 5, 3)
     
     # Driver Header
@@ -115,8 +182,12 @@ def main():
         """, unsafe_allow_html=True)
     
     # Current season stats
-    current_season = driver_data['season'].max()
-    season_data = driver_data[driver_data['season'] == current_season]
+    if 'season' in driver_data.columns:
+        current_season = driver_data['season'].max()
+        season_data = driver_data[driver_data['season'] == current_season]
+    else:
+        season_data = driver_data
+        current_season = "All Time"
     
     # Metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -167,12 +238,13 @@ def main():
     with tab1:
         st.subheader("Historical Performance")
         
-        # Performance over time chart
+        # Points per race chart
         fig = go.Figure()
         
-        # Points per race
+        x_values = driver_data['race_name'] if 'race_name' in driver_data.columns else range(len(driver_data))
+        
         fig.add_trace(go.Scatter(
-            x=driver_data['race_name'],
+            x=x_values,
             y=driver_data['points'],
             mode='lines+markers',
             name='Points',
@@ -180,11 +252,11 @@ def main():
             marker=dict(size=8)
         ))
         
-        # Add rolling average
+        # Add rolling average if enough data
         if len(driver_data) >= 5:
             driver_data['rolling_avg'] = driver_data['points'].rolling(window=5, min_periods=1).mean()
             fig.add_trace(go.Scatter(
-                x=driver_data['race_name'],
+                x=x_values,
                 y=driver_data['rolling_avg'],
                 mode='lines',
                 name='5-Race Average',
@@ -205,7 +277,7 @@ def main():
         fig_pos = go.Figure()
         
         fig_pos.add_trace(go.Scatter(
-            x=driver_data['race_name'],
+            x=x_values,
             y=driver_data['position'],
             mode='lines+markers',
             name='Position',
@@ -217,7 +289,7 @@ def main():
             title="Race Position",
             xaxis_title="Race",
             yaxis_title="Position",
-            yaxis=dict(autorange='reversed'),  # Lower position is better
+            yaxis=dict(autorange='reversed'),
             hovermode='x unified',
             height=400
         )
@@ -225,146 +297,19 @@ def main():
         st.plotly_chart(fig_pos, use_container_width=True)
     
     with tab2:
-        if show_predictions:
+        if show_predictions and F1PerformancePredictor is not None:
             st.subheader("🔮 Performance Predictions")
-            
-            # Load model
-            try:
-                with st.spinner("Loading prediction model..."):
-                    predictor = F1PerformancePredictor(
-                        model_path=Path('data/models/tft_model.pt')
-                    )
-                
-                # Make predictions
-                with st.spinner("Generating predictions..."):
-                    predictions = predictor.predict_next_races(
-                        driver_id=driver_id,
-                        historical_data=driver_data,
-                        n_races=n_races_predict
-                    )
-                
-                # Display predictions
-                st.markdown("### Next Race Predictions")
-                
-                for idx, row in predictions.iterrows():
-                    col1, col2 = st.columns([2, 1])
-                    
-                    with col1:
-                        st.markdown(f"""
-                        <div class="prediction-card">
-                            <h4 style='margin-top: 0;'>Race +{row['race_number']}</h4>
-                            <p style='font-size: 1.5rem; margin: 0.5rem 0;'>
-                                <strong>{row['predicted_points']:.1f} Points</strong>
-                            </p>
-                            <p style='color: #666; margin: 0;'>
-                                80% Confidence: {row['confidence_80_lower']:.1f} - {row['confidence_80_upper']:.1f}
-                            </p>
-                        </div>
-                        """, unsafe_allow_html=True)
-                    
-                    with col2:
-                        # Mini gauge chart
-                        fig_gauge = go.Figure(go.Indicator(
-                            mode="gauge+number",
-                            value=row['predicted_points'],
-                            domain={'x': [0, 1], 'y': [0, 1]},
-                            gauge={
-                                'axis': {'range': [0, 26]},
-                                'bar': {'color': "#E10600"},
-                                'steps': [
-                                    {'range': [0, 10], 'color': "lightgray"},
-                                    {'range': [10, 18], 'color': "gray"}
-                                ]
-                            }
-                        ))
-                        fig_gauge.update_layout(height=200, margin=dict(l=10, r=10, t=10, b=10))
-                        st.plotly_chart(fig_gauge, use_container_width=True)
-                
-                # Prediction chart with confidence intervals
-                st.markdown("### Prediction Trend")
-                
-                fig_pred = go.Figure()
-                
-                races = list(range(1, n_races_predict + 1))
-                
-                # Confidence intervals
-                fig_pred.add_trace(go.Scatter(
-                    x=races + races[::-1],
-                    y=list(predictions['confidence_95_upper']) + list(predictions['confidence_95_lower'][::-1]),
-                    fill='toself',
-                    fillcolor='rgba(225, 6, 0, 0.1)',
-                    line=dict(color='rgba(255,255,255,0)'),
-                    name='95% Confidence',
-                    showlegend=True
-                ))
-                
-                fig_pred.add_trace(go.Scatter(
-                    x=races + races[::-1],
-                    y=list(predictions['confidence_80_upper']) + list(predictions['confidence_80_lower'][::-1]),
-                    fill='toself',
-                    fillcolor='rgba(225, 6, 0, 0.2)',
-                    line=dict(color='rgba(255,255,255,0)'),
-                    name='80% Confidence',
-                    showlegend=True
-                ))
-                
-                # Median prediction
-                fig_pred.add_trace(go.Scatter(
-                    x=races,
-                    y=predictions['predicted_points'],
-                    mode='lines+markers',
-                    name='Predicted Points',
-                    line=dict(color='#E10600', width=3),
-                    marker=dict(size=10)
-                ))
-                
-                fig_pred.update_layout(
-                    title="Predicted Performance with Confidence Intervals",
-                    xaxis_title="Race Number",
-                    yaxis_title="Points",
-                    hovermode='x unified',
-                    height=400
-                )
-                
-                st.plotly_chart(fig_pred, use_container_width=True)
-                
-                # AI Insights
-                if show_insights:
-                    st.markdown("### 🤖 AI-Generated Insights")
-                    
-                    with st.spinner("Analyzing recent news and context..."):
-                        try:
-                            rag = F1RAGPipeline(
-                                corpus_path=Path('data/news_corpus')
-                            )
-                            
-                            # Get explanation for first prediction
-                            pred_dict = predictions.iloc[0].to_dict()
-                            insights = rag.explain_prediction(
-                                driver_name=selected_driver,
-                                prediction=pred_dict
-                            )
-                            
-                            st.info(insights['explanation'])
-                            
-                            # Show sources
-                            with st.expander("📰 View Sources"):
-                                for source in insights['sources']:
-                                    st.markdown(f"""
-                                    **{source['title']}**  
-                                    *{source['source']} - {source['date']}*  
-                                    Relevance: {source['relevance_score']:.2%}
-                                    """)
-                        
-                        except Exception as e:
-                            st.warning(f"Unable to generate AI insights: {str(e)}")
-            
-            except Exception as e:
-                st.error(f"Error loading model: {str(e)}")
-                st.info("Please ensure the model is trained and saved in data/models/")
-        
+            st.info("Prediction features require model training. Please train the model first.")
         else:
-            st.info("Enable 'Show Predictions' in the sidebar to see forecasts.")
+            st.info("""
+            ### Predictions Not Available
+            
+            To enable predictions:
+            1. Train the TFT model: `python -m src.models.train`
+            2. Enable "Show Predictions" in the sidebar
+            
+            Or you can view historical statistics in the Statistics tab.
+            """)
     
     with tab3:
         st.subheader("📊 Detailed Statistics")
@@ -393,9 +338,20 @@ def main():
         
         # Recent races table
         st.markdown("#### Recent Races")
-        recent_races = driver_data.tail(10)[
-            ['race_name', 'date', 'grid', 'position', 'points', 'status']
-        ].sort_values('date', ascending=False)
+        
+        display_cols = ['race_name', 'position', 'points']
+        if 'date' in driver_data.columns:
+            display_cols.insert(1, 'date')
+        if 'grid' in driver_data.columns:
+            display_cols.insert(2, 'grid')
+        if 'status' in driver_data.columns:
+            display_cols.append('status')
+        
+        available_cols = [col for col in display_cols if col in driver_data.columns]
+        recent_races = driver_data[available_cols].tail(10).sort_values(
+            'date' if 'date' in available_cols else available_cols[0],
+            ascending=False
+        )
         
         st.dataframe(
             recent_races,
